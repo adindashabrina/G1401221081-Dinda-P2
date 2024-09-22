@@ -1,0 +1,202 @@
+---
+title: "Tugas Praktikum Pertemuan 5-Data Tidak Stasioner"
+output:
+  rmdformats::readthedown
+---
+
+```{r message=FALSE, warning=FALSE}
+library(ggplot2)
+library(tsibble)
+library(tseries)
+library(MASS)
+```
+
+# Data
+
+```{r}
+datastas <- read.csv("C:/Users/hp/Documents/datampdw6.csv")
+stas <- ts(datastas)
+head(stas)
+```
+
+# Data Full (240 baris data)
+
+## Plot *Time Series*
+
+```{r}
+plot_stas <- stas |> as_tsibble() |> 
+  ggplot(aes(x = index, y = value)) + geom_line() + theme_bw() +
+  xlab("Obs") + ylab("Nilai")
+plot_stas
+mean(stas)
+```
+
+Plot deret waktu di atas menunjukkan bahwa data tidak stasioner baik itu dalam rataan maupun ragam, ditandai dengan data yang tidak menyebar di sekitar nilai tengahnya dan lebar pita yang cenderung berbeda-beda.
+
+## Plot Density
+
+```{r}
+lattice::densityplot(as.vector((~ stas)))
+```
+Pada density plot di atas distribusi yang terlihat tidak simetris yaitu cenderung menjulur ke kanan atau tidak menyerupai bentuk lonceng (distribusi normal). Hal ini menandakan data tidak stasioner.
+
+
+## Plot ACF
+
+```{r}
+acf(stas)
+```
+
+Berdasarkan plot ACF, terlihat bahwa plot ACF pada data tersebut cenderung menurun perlahan atau *tails off slowly* menandakan bahwa data tersebut tidak stasioner dalam rataan.
+
+
+## Uji ADF
+
+```{r}
+tseries::adf.test(stas)
+```
+
+$H_0$ : Data tidak stasioner dalam rataan
+
+$H_1$ : Data stasioner dalam rataan
+
+Berdasarkan uji ADF tersebut, didapat *p-value* sebesar 0.8656 yang lebih besar dari taraf nyata 5% sehingga tak tolak $H_0$ dan menandakan bahwa data tidak stasioner dalam rataan. Hal ini sesuai dengan hasil eksplorasi menggunakan plot time series dan plot ACF.
+
+## Plot Box-Cox
+
+```{r}
+index <- seq(1:140)
+bc = boxcox(stas~index, lambda = seq(-6,by=0.01))
+#Nilai Rounded Lambda
+lambda <- bc$periode[which.max(bc$harga)]
+lambda
+#SK
+bc$x[bc$y > max(bc$y) - 1/2 * qchisq(.95,1)]
+```
+
+Gambar di atas menunjukkan nilai *rounded value* ($\lambda$) optimum sebesar **-2,19** dan pada selang kepercayaan 95% nilai memiliki batas bawah **-3.08** dan batas atas **-1.30**. Selang tersebut tidak memuat nilai satu sehingga dapat dikatakan bahwa data tidak stasioner dalam ragam.
+
+# Partisi Data (Baris Data 1-70)
+
+```{r}
+dt_stas1 <- stas[1:70] |> ts()
+mean(dt_stas1)
+var(dt_stas1)
+```
+
+## Plot Time Series
+
+```{r}
+dt_stas1 |> as_tsibble() |> 
+  ggplot(aes(x = index, y = value)) +
+  geom_line() + theme_bw() +
+  xlab("Obs") + ylab("Nilai")
+```
+
+Plot deret waktu di atas menunjukkan bahwa data tidak stasioner baik itu dalam rataan maupun ragam, ditandai dengan data yang tidak menyebar di sekitar nilai tengahnya dan lebar pita yang cenderung berbeda-beda.
+
+## Plot Density
+
+```{r}
+lattice::densityplot(as.vector((~ dt_stas1)))
+```
+Pada density plot di atas distribusi yang terlihat tidak simetris yaitu cenderung menjulur ke kanan atau tidak menyerupai bentuk lonceng (distribusi normal). Hal ini menandakan data tidak stasioner.
+
+## Plot ACF
+
+```{r}
+acf(dt_stas1)
+```
+
+Berdasarkan plot ACF, terlihat bahwa plot ACF pada data tersebut cenderung menurun perlahan atau *tails off slowly* menandakan bahwa data tersebut tidak stasioner dalam rataan.
+
+## Uji ADF
+
+```{r}
+tseries::adf.test(dt_stas1)
+```
+
+$H_0$ : Data tidak stasioner dalam rataan
+
+$H_1$ : Data stasioner dalam rataan
+
+Berdasarkan uji ADF tersebut, didapat *p-value* sebesar 0.01428 yang lebih kecil dari taraf nyata 5% sehingga tolak $H_0$ dan menandakan bahwa data stasioner dalam rataan. Hal ini tidak sesuai dengan hasil eksplorasi menggunakan plot time series dan plot ACF.
+
+## Plot Boxcox
+
+```{r}
+index <- seq(1:70)
+bc = boxcox(dt_stas1~index, lambda = seq(-5,by=0.01))
+#Nilai Rounded Lambda
+lambda <- bc$x[which.max(bc$y)]
+lambda
+#SK
+bc$x[bc$y > max(bc$y) - 1/2 * qchisq(.95,1)]
+```
+
+Gambar di atas menunjukkan nilai *rounded value* ($\lambda$) optimum sebesar **-1.94** dan pada selang kepercayaan 95% nilai memiliki batas bawah **-2.67** dan batas atas **-1.24**. Selang tersebut tidak memuat nilai satu sehingga dapat dikatakan bahwa data tidak stasioner dalam ragam.
+
+# Partisi Data (Baris Data 71-140)
+
+```{r}
+dt_stas2 <- stas[71:140] |> ts()
+mean(dt_stas2)
+var(dt_stas2)
+```
+
+## Plot Time Series
+
+```{r}
+dt_stas2 |> as_tsibble() |> 
+  ggplot(aes(x = index, y = value)) +
+  geom_line() + theme_bw() +
+  xlab("Obs") + ylab("Nilai")
+```
+
+Plot deret waktu di atas menunjukkan bahwa data tidak stasioner baik itu dalam rataan maupun ragam, ditandai dengan data yang tidak menyebar di sekitar nilai tengahnya dan lebar pita yang cenderung berbeda-beda.
+
+## Plot Density
+
+```{r}
+lattice::densityplot(as.vector((~ dt_stas2)))
+```
+Pada density plot di atas distribusi yang terlihat tidak simetris yaitu cenderung menjulur ke kanan atau tidak menyerupai bentuk lonceng (distribusi normal). Hal ini menandakan data tidak stasioner.
+
+## Plot ACF
+
+```{r}
+acf(dt_stas2)
+```
+
+Berdasarkan plot ACF, terlihat bahwa plot ACF pada data tersebut cenderung menurun perlahan atau *tails off slowly* menandakan bahwa data tersebut tidak stasioner dalam rataan.
+
+## Uji ADF
+
+```{r}
+adf.test(dt_stas2)
+```
+
+$H_0$ : Data tidak stasioner dalam rataan
+
+$H_1$ : Data stasioner dalam rataan
+
+Berdasarkan uji ADF tersebut, didapat *p-value* sebesar 0.9067 yang lebih besar dari taraf nyata 5% sehingga tak tolak $H_0$ dan menandakan bahwa data tidak stasioner dalam rataan. Hal ini sesuai dengan hasil eksplorasi menggunakan plot time series dan plot ACF.
+
+## Plot Boxcox
+
+```{r}
+index <- seq(71:140)
+bc = boxcox(dt_stas2~index, lambda = seq(-6,by=0.01))
+#Nilai Rounded Lambda
+lambda <- bc$x[which.max(bc$y)]
+lambda
+#SK
+bc$x[bc$y > max(bc$y) - 1/2 * qchisq(.95,1)]
+```
+
+Gambar di atas menunjukkan nilai *rounded value* ($\lambda$) optimum sebesar **2,63** dan pada selang kepercayaan 95% nilai memiliki batas bawah **-3.81** dan batas atas **-1.51**. Selang tersebut tidak memuat nilai satu sehingga dapat dikatakan bahwa data tidak stasioner dalam ragam.
+
+
+# Kesimpulan
+
+Secara keseluruhan baik itu data full maupun data yang dipartisi menunjukkan ketidakstasioneran baik itu dalam rataan maupun ragam. Hal ini dikarenakan data harga cabai rawit cenderung membentuk pola tren. Namun pada uji ADF data partisi pertama menunjukkan hasil data stasioner, namun yang diambil sebagai kesimpulan adalah uji ACF atau berdasarkan eksplorasinnya.
