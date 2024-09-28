@@ -1,0 +1,217 @@
+---
+title: "Latihan Pertemuan 6 : Pendugaan Parameter - Adinda Shabrina Putri Salsabila"
+output:
+  rmdformats::readthedown
+date: "2023-09-30"
+---
+
+# Packages
+
+```{r message=FALSE, warning=FALSE}
+library(ggplot2)
+library(tsibble)
+library(tseries)
+library(MASS)
+library(forecast)
+library(TSA)
+library(TTR)
+library(aTSA)
+library(graphics)
+```
+
+# Data
+
+Digunakan data harga cabai rawit di wilayah Jakarta yang dalam hal ini hanya digunakan data 140 periode akhir
+
+```{r}
+data <- read.csv("C:/Users/hp/Documents/datampdw6.csv")
+datacabai.ts <- ts(data)
+head(datacabai.ts)
+```
+
+# Eksplorasi Data
+
+## Plot Data Penuh
+
+```{r}
+plot.ts(datacabai.ts, lty=1, xlab="waktu", ylab="Harga Cabai", main="Plot Data Harga Cabai")
+```
+
+Berdasarkan plot data deret waktu, terlihat adanya tren jangka panjang yang fluktuatif. Data dimulai dengan harga tinggi, kemudian menurun secara umum hingga sekitar titik data ke-80, lalu mulai menunjukkan tren kenaikan kembali hingga akhir periode.Juga adanya indikasi pola siklis, ditunjukkan oleh fluktuasi yang berulang dalam jangka waktu yang lebih panjang. Terlihat beberapa siklus naik-turun sepanjang periode waktu yang ditampilkan. Berdasarkan pola data, pembagian data latih dan data uji ditetapkan dengan proporsi 71%:29%.
+
+## Plot Data Latih
+
+```{r}
+cabaitrain<-datacabai.ts[1:100]
+train.ts<-ts(cabaitrain)
+plot.ts(train.ts, lty=1, xlab="waktu", ylab="Harga Cabai", main="Plot Harga Cabai Train")
+```
+
+Berdasarkan plot data deret waktu pada data latih, terlihat bahwa data cenderung memiliki trend yang naik-turun dan cenderung tidak bergerak pada nilai tengah tertentu. Hal ini mengindikasikan bahwa data tidak stasioner dalam rataan.
+
+## Plot Data Uji
+
+```{r}
+cabaitest<-datacabai.ts[101:140]
+test.ts<-ts(cabaitest)
+plot.ts(test.ts, lty=1, xlab="waktu", ylab="Harga Cabai", main="Plot Harga Cabai Test")
+```
+
+# Uji Stasioneritas Data
+
+## Plot ACF
+
+```{r}
+acf(train.ts)
+```
+
+Berdasarkan plot ACF, terlihat bahwa plot ACF data menurun secara perlahan (*tails of slowly*). Hal ini juga menjadi indikasi bahwa data tidak stasioner dalam rataan
+
+## Uji ADF
+
+```{r}
+tseries::adf.test(train.ts)
+```
+
+$H_0$ : Data tidak stasioner dalam rataan
+
+$H_1$ : Data stasioner dalam rataan
+
+Berdasarkan uji ADF tersebut, didapat *p-value* sebesar 0.09586 yang lebih besar dari taraf nyata 5% sehingga tak tolak $H_0$ dan menandakan bahwa data tidak stasioner dalam rataan. Hal ini sesuai dengan hasil eksplorasi menggunakan plot time series dan plot ACF, sehingga ketidakstasioneran model kedepannya harus ditangani
+
+## Plot Box-Cox
+
+```{r}
+index <- seq(1:100)
+bc = boxcox(train.ts~index, lambda = seq(-5,by=1))
+#Nilai Rounded Lambda
+lambda <- bc$x[which.max(bc$y)]
+lambda
+#SK
+bc$x[bc$y > max(bc$y) - 1/2 * qchisq(.95,1)]
+```
+
+Plot Boxcox menunjukkan nilai *rounded value* ($\lambda$) optimum sebesar **-1.787879** dan pada selang kepercayaan 95% nilai memiliki batas bawah **-2.6969697** dan batas atas **-0.8787879**. Selang tersebut tidak memuat nilai satu sehingga dapat dikatakan bahwa data tidak stasioner dalam ragam.
+
+# Penanganan Ketidakstasioneran Data
+
+```{r}
+train.diff<-diff(train.ts,differences = 1) 
+plot.ts(train.diff, lty=1, xlab="waktu", ylab="Data Difference 1 Harga Cabai", main="Plot Difference Harga Cabai")
+```
+
+Berdasarkan plot data deret waktu, terlihat bahwa data sudah stasioner dalam rataan ditandai dengan data bergerak pada nilai tengah tertentu (tidak terdapat trend ataupun musiman pada data)
+
+## Plot ACF
+
+```{r}
+acf(train.diff)
+```
+
+Berdasarkan plot tersebut, terlihat bahwa plot ACF tails off tetapi tidak signifikan pada 20 lag pertama. Hal ini menandakan data sudah stasioner dalam rataan dan ketidakstasioneran data telah berhasil tertangani.
+
+## Uji ADF
+
+```{r}
+tseries::adf.test(train.diff)
+```
+
+$H_0$ : Data tidak stasioner dalam rataan
+
+$H_1$ : Data stasioner dalam rataan
+
+Berdasarkan uji ADF tersebut, didapat *p-value* sebesar 0.01 yang lebih kecil dari taraf nyata 5% sehingga tolak $H_0$ atau data stasioner dalam rataan. Hal ini sesuai dengan hasil eksplorasi menggunakan plot time series dan plot ACF, sehingga dalam hal ini ketidakstasioneran data sudah berhasil ditangani dan dapat dilanjutkan ke pemodelan
+
+# Identifikasi Model
+
+## Plot ACF
+
+```{r}
+acf(train.diff)
+```
+
+Berdasarkan plot tersebut, terlihat bahwa plot ACF tidak *cuts off* pada 20 lag pertama, sehingga belum bisa ditentukan model tentatifnya.
+
+## Plot PACF
+
+```{r}
+pacf(train.diff)
+```
+
+Berdasarkan plot tersebut, terlihat bahwa plot PACF tidak *cuts off* pada lag ke 20 lag pertama, sehingga belum bisa ditentukan model tentatifnya.
+
+
+## Plot EACF
+
+```{r}
+eacf(train.diff)
+```
+
+Identifikasi model menggunakan plot EACF dilakukan dengan melihat ujung segitiga pada pola segitiga nol. Dalam hal ini model tentatif yang terbentuk adalah ARIMA(0,1,1), ARIMA(1,1,1), ARIMA(2,1,1), ARIMA(2,1,2), ARIMA(3,1,0), dan ARIMA(3,1,1).
+
+# Pendugaan Parameter Model Tentatif
+
+## ARIMA(0,1,1)
+
+```{r}
+model1.da=Arima(train.diff, order=c(0,1,1),method="ML")
+summary(model1.da) #AIC=1893.21
+lmtest::coeftest(model1.da) #seluruh parameter signifikan
+```
+
+## ARIMA(1,1,1)
+
+```{r}
+model2.da=Arima(train.diff, order=c(1,1,1),method="ML")
+summary(model2.da) #AIC=1893.47
+lmtest::coeftest(model2.da) #terdapat parameter tidak signifikan
+```
+
+## ARIMA(2,1,1)
+
+```{r}
+model3.da=Arima(train.diff, order=c(2,1,1),method="ML")
+summary(model3.da) #AIC=1894.42
+lmtest::coeftest(model3.da) #terdapat parameter tidak signifikan
+```
+
+## ARIMA(2,1,2)
+
+```{r}
+model4.da=Arima(train.diff, order=c(2,1,2),method="ML")
+summary(model4.da) #AIC=1896.25
+lmtest::coeftest(model4.da) #terdapat parameter tidak signifikan
+```
+
+## ARIMA(3,1,0)
+
+```{r}
+model5.da=Arima(train.diff, order=c(3,1,0),method="ML")
+summary(model5.da) #AIC=1913.93
+lmtest::coeftest(model5.da) #seluruh parameter signifikan
+```
+
+## ARIMA(3,1,1)
+
+```{r}
+model6.da=Arima(train.diff, order=c(3,1,1),method="ML")
+summary(model6.da) #AIC=1896.25
+lmtest::coeftest(model6.da) #terdapat parameter tidak signifikan
+```
+
+# Penentuan Model Terbaik
+
+```{r}
+perbandingan <- matrix(c("1893.21","Semua_signifikan",
+                        "1893.47","ar1_tidak_signifikan",
+                        "1894.42","ar1_ar2_tidak_signifikan",
+                        "1896.25","ar1_ar2_ma2_tidak_signifikan",
+                        "1913.93","Semua_signifikan",
+                        "1896.25","ar1_ar2_ar3_tidak_signifikan"),nrow=6,ncol=2,byrow = T)
+colnames(perbandingan) <- c("AIC", "Parameter")
+row.names(perbandingan) <- c("ARIMA(0,1,1)","ARIMA(1,1,1)","ARIMA(2,1,1)","ARIMA(2,1,2)","ARIMA(3,1,0)","ARIMA(3,1,1)")
+perbandingan
+```
+
+Berdasarkan pendugaan parameter di atas, nilai AIC terkecil dimiliki oleh model ARIMA(0,1,1) dan parameter model ARIMA(0,1,1) juga seluruhnya signifikan sehingga model yang dipilih adalah model ARIMA(0,1,1).
+
