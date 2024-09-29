@@ -1,7 +1,7 @@
 ---
 title: "Latihan Pertemuan 6 : Pendugaan Parameter - Adinda Shabrina Putri Salsabila"
 output:
-  rmdformats::readthedown
+  rmdformats::readthedown: default
 date: "2023-09-30"
 ---
 
@@ -96,7 +96,7 @@ Plot Boxcox menunjukkan nilai *rounded value* ($\lambda$) optimum sebesar **-1.7
 # Penanganan Ketidakstasioneran Data
 
 ```{r}
-train.diff<-diff(train.ts,differences = 1) 
+train.diff<-diff(train.ts,differences = 2) 
 plot.ts(train.diff, lty=1, xlab="waktu", ylab="Data Difference 1 Harga Cabai", main="Plot Difference Harga Cabai")
 ```
 
@@ -108,7 +108,7 @@ Berdasarkan plot data deret waktu, terlihat bahwa data sudah stasioner dalam rat
 acf(train.diff)
 ```
 
-Berdasarkan plot tersebut, terlihat bahwa plot ACF tails off tetapi tidak signifikan pada 20 lag pertama. Hal ini menandakan data sudah stasioner dalam rataan dan ketidakstasioneran data telah berhasil tertangani.
+Berdasarkan plot tersebut, terlihat bahwa plot ACF cuts off pada lag ke 1. Hal ini menandakan data sudah stasioner dalam rataan dan ketidakstasioneran data telah berhasil tertangani.
 
 ## Uji ADF
 
@@ -130,7 +130,7 @@ Berdasarkan uji ADF tersebut, didapat *p-value* sebesar 0.01 yang lebih kecil da
 acf(train.diff)
 ```
 
-Berdasarkan plot tersebut, terlihat bahwa plot ACF tidak *cuts off* pada 20 lag pertama, sehingga belum bisa ditentukan model tentatifnya.
+Berdasarkan plot tersebut, terlihat bahwa plot ACF cenderung *cuts off* pada lag ke 1, sehingga jika plot PACF dianggap *tails of*, maka model tentatifnya adalah ARIMA(0,2,1)
 
 ## Plot PACF
 
@@ -138,7 +138,9 @@ Berdasarkan plot tersebut, terlihat bahwa plot ACF tidak *cuts off* pada 20 lag 
 pacf(train.diff)
 ```
 
-Berdasarkan plot tersebut, terlihat bahwa plot PACF tidak *cuts off* pada lag ke 20 lag pertama, sehingga belum bisa ditentukan model tentatifnya.
+Berdasarkan plot tersebut, terlihat bahwa plot PACF cenderung *cuts off* pada lag ke 5, sehingga jika plot ACF dianggap *tails of*, maka model tentatifnya adalah ARIMA(5,2,0).
+
+Jika baik plot ACF maupun plot PACF keduanya dianggap tails of, maka model yang terbentuk adalah ARIMA(5,2,1)
 
 
 ## Plot EACF
@@ -147,71 +149,71 @@ Berdasarkan plot tersebut, terlihat bahwa plot PACF tidak *cuts off* pada lag ke
 eacf(train.diff)
 ```
 
-Identifikasi model menggunakan plot EACF dilakukan dengan melihat ujung segitiga pada pola segitiga nol. Dalam hal ini model tentatif yang terbentuk adalah ARIMA(0,1,1), ARIMA(1,1,1), ARIMA(2,1,1), ARIMA(2,1,2), ARIMA(3,1,0), dan ARIMA(3,1,1).
+Identifikasi model menggunakan plot EACF dilakukan dengan melihat ujung segitiga pada pola segitiga nol. Dalam hal ini model tentatif yang terbentuk adalah ARIMA(0,2,1), ARIMA(0,2,2), ARIMA(1,2,2), ARIMA(2,2,3), ARIMA(4,2,1)
 
 # Pendugaan Parameter Model Tentatif
 
-## ARIMA(0,1,1)
+## ARIMA(0,2,1)
 
 ```{r}
-model1.da=Arima(train.diff, order=c(0,1,1),method="ML")
-summary(model1.da) #AIC=1893.21
+model1.da=Arima(train.diff, order=c(0,0,1),method="ML")
+summary(model1.da) #AIC=1893.61
 lmtest::coeftest(model1.da) #seluruh parameter signifikan
 ```
 
-## ARIMA(1,1,1)
+## ARIMA(5,2,0)
 
 ```{r}
-model2.da=Arima(train.diff, order=c(1,1,1),method="ML")
-summary(model2.da) #AIC=1893.47
-lmtest::coeftest(model2.da) #terdapat parameter tidak signifikan
+model2.da=Arima(train.diff, order=c(5,0,0),method="ML")
+summary(model2.da) #AIC=1908.64
+lmtest::coeftest(model2.da) #seluruh parameter signifikan
 ```
 
-## ARIMA(2,1,1)
+## ARIMA(5,2,1)
 
 ```{r}
-model3.da=Arima(train.diff, order=c(2,1,1),method="ML")
-summary(model3.da) #AIC=1894.42
+model3.da=Arima(train.diff, order=c(5,0,1),method="ML")
+summary(model3.da) #AIC=1899.01
 lmtest::coeftest(model3.da) #terdapat parameter tidak signifikan
 ```
 
-## ARIMA(2,1,2)
+## ARIMA(0,2,2)
 
 ```{r}
-model4.da=Arima(train.diff, order=c(2,1,2),method="ML")
-summary(model4.da) #AIC=1896.25
-lmtest::coeftest(model4.da) #terdapat parameter tidak signifikan
+model4.da=Arima(train.diff, order=c(0,0,2),method="ML")
+summary(model4.da) #AIC=1892.73
+lmtest::coeftest(model4.da) #seluruh parameter signifikan
 ```
 
-## ARIMA(3,1,0)
+## ARIMA(1,2,2)
 
 ```{r}
-model5.da=Arima(train.diff, order=c(3,1,0),method="ML")
-summary(model5.da) #AIC=1913.93
+model5.da=Arima(train.diff, order=c(1,0,2),method="ML")
+summary(model5.da) #AIC=1890.3
 lmtest::coeftest(model5.da) #seluruh parameter signifikan
 ```
 
-## ARIMA(3,1,1)
+## ARIMA(4,2,1)
 
 ```{r}
-model6.da=Arima(train.diff, order=c(3,1,1),method="ML")
-summary(model6.da) #AIC=1896.25
-lmtest::coeftest(model6.da) #terdapat parameter tidak signifikan
+model6.da=Arima(train.diff, order=c(4,0,1),method="ML")
+summary(model6.da) #AIC=1897.02
+lmtest::coeftest(model6.da) #terdapat parameter tak signifikan
 ```
 
 # Penentuan Model Terbaik
 
 ```{r}
-perbandingan <- matrix(c("1893.21","Semua_signifikan",
-                        "1893.47","ar1_tidak_signifikan",
-                        "1894.42","ar1_ar2_tidak_signifikan",
-                        "1896.25","ar1_ar2_ma2_tidak_signifikan",
-                        "1913.93","Semua_signifikan",
-                        "1896.25","ar1_ar2_ar3_tidak_signifikan"),nrow=6,ncol=2,byrow = T)
+perbandingan <- matrix(c("1893.61","semua_signifikan",
+                        "1908.64","semua_signifikan",
+                        "1899.01","4_parameter_tidak_signifikan",
+                        "1892.73","semua_signifikan",
+                        "1890.3","Semua_signifikan",
+                        "1897.02","3_parameter_tidak_signifikan"),nrow=6,ncol=2,byrow = T)
 colnames(perbandingan) <- c("AIC", "Parameter")
-row.names(perbandingan) <- c("ARIMA(0,1,1)","ARIMA(1,1,1)","ARIMA(2,1,1)","ARIMA(2,1,2)","ARIMA(3,1,0)","ARIMA(3,1,1)")
+row.names(perbandingan) <- c("ARIMA(0,2,1)","ARIMA(5,2,0)","ARIMA(5,2,1)","ARIMA(0,2,2)","ARIMA(1,2,2)","ARIMA(4,2,1)")
 perbandingan
 ```
 
-Berdasarkan pendugaan parameter di atas, nilai AIC terkecil dimiliki oleh model ARIMA(0,1,1) dan parameter model ARIMA(0,1,1) juga seluruhnya signifikan sehingga model yang dipilih adalah model ARIMA(0,1,1).
+Berdasarkan pendugaan parameter di atas dengan differencing sebanyak dua kali, nilai AIC terkecil dimiliki oleh model ARIMA(1,2,2) dan parameter model ARIMA(1,2,2) juga seluruhnya signifikan sehingga model yang dipilih adalah model ARIMA(1,2,2).
 
