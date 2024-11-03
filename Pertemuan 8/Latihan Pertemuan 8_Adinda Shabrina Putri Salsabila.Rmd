@@ -1,0 +1,419 @@
+---
+title: 'Latihan Pertemuan 8 : Model Seasonal ARIMA (SARIMA)'
+date: "`r Sys.Date()`"
+output:
+  rmdformats::readthedown
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Packages
+
+```{r pkg, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(forecast)
+library(TSA)
+library(aTSA)
+library(car)
+library(lmtest)
+library(tidyr)
+```
+
+# Impor Data
+
+Data yang digunakan adalah data bulanan food and beverages dari bulan Januari 2005 hingga Desember 2019 di United States. Data diambil dari Kaggle dan berjumlah 180 baris data.
+
+```{r data}
+musiman <- read.csv("C:/Users/hp/Documents/KULIAH/SEMESTER 5/MPDW/PRAKTIKUM/PERTEMUAN 8/datamusiman.csv", sep = ";")
+head(musiman)
+```
+
+```{r}
+class(musiman)
+```
+
+# Eksplorasi Data
+
+```{r}
+ts.plot(musiman, type="l", xlab = "Year", ylab="Food and Beverage", col="blue")
+title(main = "Time Series Plot of Food and Beverage", cex.sub = 0.8)
+points(musiman, pch = 20, col = "blue")
+```
+
+```{r}
+musiman <- ts(musiman, frequency = 12) # Untuk data bulanan
+dec.musiman <- decompose(musiman)
+plot(dec.musiman)
+```
+
+Secara eksplorasi, terlihat adanya kecenderungan data memiliki tren naik dan perilaku berulang kecenderungan musiman dalam deret tersebut. Kecenderungan musiman dapat dilihat dengan lebih jelas dengan menampilkan deret waktu per tahun.
+
+```{r}
+seasonplot(musiman,12,main="Seasonal Plot of Food and Beverages", ylab="Year",
+           year.labels = TRUE, col=rainbow(18))
+```
+
+Gambar menunjukkan bahwa food and beverages tinggi pada bulan Januari, Maret, Mei, Agustus, Desember, dan rendah pada bulan Februari, April, Juni, September. Perilaku tersebut terus berulang dari tahun ke tahun.
+
+```{r}
+monthplot(musiman,ylab="Food", col="blue")
+```
+
+```{r}
+frame<-data.frame(Food=as.matrix(musiman), date=lubridate::year(zoo::as.Date(musiman)))
+
+library(ggplot2)
+ggplot(frame,aes(y=Food,x=date,group=date))+
+  geom_boxplot()
+```
+
+Berdasarkan hasil plot di atas dapat terlihat bahwa data memiliki pola yang hampir sama dari tahun ke tahun sehingga dapat disimpulkan bahwa periode musimannya adalah 12. Selain itu, apabila dilihat dari boxplot, terlihat bahwa data cenderung homogen dari tahun ke tahun meskupun terdapat beberapa pencilan. Untuk memastikan bahwa data homogen akan dilakukan uji homogenitas dengan `fligner.test`.
+
+## Uji Homogenitas
+
+Uji asumsi formal terhadap kehomogenan ragam yang digunakan yaitu *Fligner-Killen test*, dimana:
+
+$H_0$ : Ragam homogen
+
+$H_1$ : Ragam tidak homogen
+
+```{r}
+library(car)
+fligner.test(Food ~ date, data=frame)
+```
+
+Berdasarkan hasil uji *Fligner-Killeen* dengan menggunakan taraf signifikansi $\alpha=5\%$ didapatkan *p-value* sebesar 0.9086. $p-value=0.9086>\alpha=0.05$ sehingga tak tolak $H_0$ atau dengan kata lain **ragam data sudah stasioner**.
+
+# Pembagian Data
+
+Pembagian data dilakukan dengan mengambil sekitar 86% data awal (156 observasi) sebagai data latih dan 14% sisanya (24 observasi) sebagai data uji.
+
+```{r}
+train.ts <- subset(musiman,start=1,end=156)
+test.ts <- subset(musiman,start=157,end=180)
+```
+
+### Plot Data Latih
+
+```{r}
+autoplot(train.ts) + theme_bw() + xlab("Year") + ylab("Food and Beverages")
+```
+
+### Plot Data Uji
+
+```{r}
+autoplot(test.ts) + theme_bw() + xlab("Year") + ylab("Food and Beverages")
+```
+
+# Non-Seasonal ARIMA
+
+## Kestasioneran Data
+
+```{r}
+acf0 <- acf(train.ts,main="ACF",lag.max=48,xaxt="n", col="blue")
+axis(1, at=0:48/12, labels=0:48)
+```
+
+```{r}
+acf0$lag <- acf0$lag * 12
+acf0.1 <- as.data.frame(cbind(acf0$acf,acf0$lag))
+acf0.2 <- acf0.1[which(acf0.1$V2%%12==0),]
+barplot(height = acf0.2$V1, 
+names.arg=acf0.2$V2, ylab="ACF", xlab="Lag")
+```
+
+Berdasarkan plot deret sebelumnya diketahui bahwa perilaku deret berulang setiap tahun, atau dikatakan bahwa deret memiliki periode musiman bulanan, sehingga $s=12$. Perhatikan nilai fungsi autokorelasi pada lag-lag musiman (lag 12, 24, 36,\...) dalam plot ACF contoh di atas. Tampak bahwa nilai autokorelasi pada lag-lag tersebut memiliki hubungan yang kuat. Bagaimanapun juga, plot ACF contoh meluruh secara perlahan dan membentuk pola gelombang kosinus teredam, yang menandakan ketidakstasioneran (plot deret juga menunjukkan adanya trend naik dalam deret).
+
+```{r}
+tseries::adf.test(train.ts)
+```
+
+$H_0$ : Data tidak stasioner dalam rataan
+
+$H_1$ : Data stasioner dalam rataan
+
+Berdasarkan uji ADF tersebut, didapat *p-value* sebesar 0.01 yang lebih kecil dari taraf nyata 5% sehingga tolak $H_0$ dan menandakan bahwa data stasioner dalam rataan. Hal ini tidak sesuai dengan hasil eksplorasi menggunakan plot time series dan plot ACF, sehingga ketidakstasioneran model kedepannya harus tetap ditangani.
+
+## Pembedaan
+
+```{r}
+d1 <- diff(train.ts)
+ts.plot(d1, type="l", ylab="d1 Xt", col="blue")
+```
+
+*Differencing non-seasonal* $d=1$ jika dilihat berdasarkan plot di atas berhasil mengatasi ketidakstasioneran dalam rataan untuk komponen *non-seasonal*.
+
+```{r}
+acf1 <- acf(d1,lag.max=48,xaxt="n", main="ACF d1", col="blue")
+axis(1, at=0:48/12, labels=0:48)
+```
+
+```{r}
+acf2 <- acf1$lag <- acf1$lag * 12
+acf1.1 <- as.data.frame(cbind(acf1$acf,acf1$lag))
+acf1.2 <- acf1.1[which(acf1.1$V2%%12==0),]
+barplot(height = acf1.2$V1, names.arg=acf1.2$V2, ylab="ACF", xlab="Lag")
+```
+
+Plot ACF data *non-seasonal differencing* $d=1$ mengkonfirmasi kestasioneran komponen *non-seasonal* (namun perhatikan lag 12,24, dst), pada *series* *seasonal* **belum stasioner**. Hal ini menunjukkan adanya kecenderungan musiman
+
+# Seasonal ARIMA
+
+```{r}
+D1 <- diff(train.ts,12)
+ts.plot(D1, type="l", ylab="D1 Xt", col="blue")
+```
+
+```{r}
+acf2<-acf(D1,lag.max=48,xaxt="n", main="ACF D1", col="blue")
+```
+
+```{r}
+acf2$lag <- acf2$lag * 12
+acf2.1 <- as.data.frame(cbind(acf2$acf,acf2$lag))
+acf2.2 <- acf2.1[which(acf2.1$V2%%12==0),]
+barplot(height = acf2.2$V1, names.arg=acf2.2$V2, ylab="ACF", xlab="Lag")
+```
+
+*Non-seasonal differencing* D = 12 berhasil mengatasi ketidakstasioneran dalam rataan untuk komponen *seasonal*nya (namun tidak untuk komponen *non-seasonal*nya).
+
+Untuk menghilangkan kecenderungan musiman dilakukan pembedaan musiman terhadap deret hasil pembedaan pertama.
+
+```{r}
+d1D1 <- diff(D1)
+ts.plot(d1D1, type="l", ylab="d1 D1 Xt", col="blue")
+```
+
+Setelah pembedaan pertama dan pembedaan musiman tampak bahwa deret sudah tidak memiliki kecenderungan apapun. Selanjutnya penentuan ordo *p*, *q* dan *P*, *Q* dapat dilakukan menggunakan plot ACF dan PACF contoh dari deret hasil pembedaan pertama dan pembedaan musiman tersebut.
+
+## Identifikasi Model
+
+```{r}
+acf3 <- acf(d1D1,lag.max=48,xaxt="n", main="ACF d1D1", col="blue")
+axis(1, at=0:48/12, labels=0:48)
+```
+
+```{r}
+acf3$lag <- acf3$lag * 12
+acf3.1 <- as.data.frame(cbind(acf3$acf,acf3$lag))
+acf3.2 <- acf3.1[which(acf3.1$V2%%12==0),]
+barplot(height = acf3.2$V1, names.arg=acf3.2$V2, ylab="ACF", 
+xlab="Lag")
+```
+
+Berdasarkan plot ACF contoh lag 1 signifikan sehingga dipilih ordo *q*=1 , dan lag musiman tidak terlihat model AR yang terbentuk karena cenderung *tails-off* sehingga Q=0.
+
+```{r}
+pacf3 <- pacf(d1D1,lag.max=48,xaxt="n", main="PACF d1D1", col="blue")
+axis(1, at=0:48/12, labels=0:48)
+```
+
+```{r}
+pacf3$lag <- pacf3$lag * 12
+pacf3.1 <- as.data.frame(cbind(pacf3$acf,pacf3$lag))
+pacf3.2 <- pacf3.1[which(pacf3.1$V2%%12==0),]
+barplot(height = pacf3.2$V1, names.arg=pacf3.2$V2, ylab="PACF", xlab="Lag")
+```
+
+Plot PACF contoh menunjukkan *cuts-off* pada lag-2 sehingga ordo *p*=2, sementara pada pola musimannya lag 12 cenderung cut off sehingga P=1
+
+Model musiman yang dipilih untuk deret konsentrasi karbon dioksida adalah $ARIMA(2,1,0)\times(1,1,0)_{12}$, $ARIMA(0,1,2)\times(1,1,0)_{12}$, $ARIMA(2,1,2)\times(1,1,0)_{12}$. Ingat kembali bahwa model yang digunakan bersifat tentatif dan dapat berubah saat diagnostik model.
+
+**EACF**
+
+```{r}
+TSA::eacf(d1D1)
+```
+
+Karena, kedua komponen telah stasioner. Identifikasi komponen *non-seasonal* adalah ARIMA(2,1,2), ARIMA(2,1,3). Identifikasi komponen *seasonal* adalah $ARIMA(0,1,1)_{12}$, sehingga model tentatif yang diperoleh adalah:
+
+-   $ARIMA(2,1,0)\times(1,1,0)_{12}$
+
+-   $ARIMA(0,1,2)\times(1,1,0)_{12}$
+
+-   $ARIMA(2,1,2)\times(1,1,0)_{12}$
+
+-   $ARIMA(2,1,3)\times(1,1,0)_{12}$
+
+-   $ARIMA(1,1,1)\times(1,1,0)_{12}$
+
+## Pendugaan Parameter
+
+```{r}
+#ARIMA(2,1,0)x(1,1,0)12
+tmodel1 <- Arima(train.ts,order=c(2,1,0),seasonal=c(1,1,0))
+summary(tmodel1)
+lmtest::coeftest(tmodel1)
+```
+
+```{r}
+#ARIMA(0,1,2)x(1,1,0)12
+tmodel2 <- Arima(train.ts,order=c(0,1,2),seasonal=c(1,1,0))
+summary(tmodel2)
+lmtest::coeftest(tmodel2)
+```
+
+```{r}
+#ARIMA(2,1,2)x(1,1,0)12
+tmodel3 <- Arima(train.ts,order=c(2,1,2),seasonal=c(1,1,0))
+summary(tmodel3)
+lmtest::coeftest(tmodel3)
+```
+
+```{r}
+#ARIMA(2,1,3)x(1,1,0)12
+tmodel4 <- Arima(train.ts,order=c(2,1,3),seasonal=c(1,1,0))
+summary(tmodel4)
+lmtest::coeftest(tmodel4)
+```
+
+```{r}
+#ARIMA(1,1,1)x(1,1,0)12
+tmodel5 <- Arima(train.ts,order=c(1,1,1),seasonal=c(1,1,0))
+summary(tmodel5)
+lmtest::coeftest(tmodel5)
+```
+
+```{r}
+AICKandidatModel <- c(tmodel1$aic, tmodel2$aic, tmodel3$aic,
+                      tmodel4$aic, tmodel5$aic)
+AICcKandidatModel <- c(tmodel1$aicc, tmodel2$aicc, tmodel3$aicc,
+                       tmodel4$aicc, tmodel5$aicc)
+BICKandidatModel <- c(tmodel1$bic, tmodel2$bic, tmodel3$bic,
+                      tmodel4$bic, tmodel5$bic)
+KandidatModelARIMA <- c("ARIMA(2,1,0)(1,1,0)12", "ARIMA(0,1,2)(1,1,0)12",
+                        "ARIMA(2,1,2)(1,1,0)12", "ARIMA(2,1,3)(1,1,0)12",
+                        "ARIMA(1,1,1)(1,1,0)12")
+compmodelARIMA <- cbind(KandidatModelARIMA, AICKandidatModel,
+                        AICcKandidatModel, BICKandidatModel)
+colnames(compmodelARIMA) <- c("Kandidat Model", "Nilai AIC", 
+                              "Nilai AICc", "Nilai BIC")
+compmodelARIMA <- as.data.frame(compmodelARIMA)
+compmodelARIMA
+```
+
+Model **terbaik** berdasarkan nilai **AIC dan AICc terkecil** dari kandidat model **yaitu** $ARIMA(2,1,3)\times(1,1,0)_{12}$ dengan semua parameter yang signfikan
+
+```{r}
+model.auto.arima <- auto.arima(train.ts)
+summary(model.auto.arima)
+lmtest::coeftest(model.auto.arima)
+```
+
+## Diagnostik Model
+
+```{r}
+tsdisplay(residuals(tmodel4), lag.max=45, 
+          main='ARIMA(2,1,3)(1,1,0)12 Model Residuals', col="blue")
+```
+
+```{r}
+#Eksplorasi
+sisaan.model4 <- tmodel4$residuals
+par(mfrow=c(2,2))
+car::qqPlot(sisaan.model4)
+plot(c(1:length(sisaan.model4)),sisaan.model4)
+acf(sisaan.model4)
+pacf(sisaan.model4)
+par(mfrow = c(1,1))
+```
+
+Berdasarkan plot di atas terlihat bahwa sisaan mengikuti sebaran normal. Selanjutnya, ditinjau dari plot ACF dan PACF terlihat bahwa ada lag yang signifikan. Hal tersebut menunjukkan bahwa kemungkinan ada gejala autokorelasi pada sisaan. Selanjutnya, untuk memastikan kembali akan dilakukan uji asumsi secara formal:
+
+## Uji Formal
+
+```{r}
+#1) Sisaan Menyebar Normal
+ks.test(sisaan.model4,"pnorm")
+#tak tolak H0 > sisaan menyebar normal
+shapiro.test(sisaan.model4)
+nortest::ad.test(sisaan.model4)
+```
+
+Selain dengan eksplorasi, asumsi tersebut dapat diuji menggunakan uji formal. Pada tahapan ini uji formal yang digunakan untuk normalitas adalah uji Kolmogorov-Smirnov (KS), Shapiro-Wilk, dan Anderson-Darling. Hipotesis pada uji kenormalan adalah sebagai berikut.
+
+$H_0$ : Sisaan menyebar normal
+
+$H_1$ : Sisaan tidak menyebar normal
+
+Berdasarkan uji KS, Shapiro-Wilk test, dan Anderson-Darling test tersebut, didapat *p-value* sebesar 0.000 yang lebih kecil dari taraf nyata 5% sehingga tolak $H_0$ dan menandakan bahwa sisaan menyebar normal.
+
+```{r}
+#2) Sisaan saling bebas/tidak ada autokorelasi
+Box.test(sisaan.model4, type = "Ljung") 
+#tak tolak H0 > sisaan saling bebas
+```
+
+Selanjutnya akan dilakukan uji formal untuk kebebasan sisaan menggunakan uji Ljung-Box. Hipotesis yang digunakan adalah sebagai berikut.
+
+$H_0$ : Sisaan saling bebas
+
+$H_1$ : Sisaan tidak tidak saling bebas
+
+Berdasarkan uji Ljung-Box tersebut, didapat *p-value* sebesar 0.3535 yang lebih besar dari taraf nyata 5% sehingga tak tolak $H_0$ dan menandakan bahwa sisaan saling bebas. Hal ini berbeda dengan eksplorasi.
+
+```{r}
+#3) Sisaan homogen 
+Box.test((sisaan.model4)^2, type = "Ljung")  
+#tak tolak H0 > sisaan homogen
+```
+
+Hipotesis yang digunakan untuk uji kehomogenan ragam adalah sebagai berikut.
+
+$H_0$ : Ragam sisaan homogen
+
+$H_1$ : Ragam sisaan tidak homogen
+
+Berdasarkan uji Ljung-Box terhadap sisaan kuadrat tersebut, didapat *p-value* sebesar 0.04092 yang lebih kecil dari taraf nyata 5% sehingga tolak $H_0$ dan menandakan bahwa ragam sisaan tidak homogen.
+
+```{r}
+#4) Nilai tengah sisaan sama dengan nol 
+t.test(sisaan.model4, mu = 0, conf.level = 0.95) 
+#tak tolak h0 > nilai tengah sisaan sama dengan 0
+```
+
+Terakhir, dengan uji-t, akan dicek apakah nilai tengah sisaan sama dengan nol. Hipotesis yang diujikan sebagai berikut.
+
+$H_0$ : nilai tengah sisaan sama dengan 0
+
+$H_1$ : nilai tengah sisaan tidak sama dengan 0
+
+Berdasarkan uji-ttersebut, didapat *p-value* sebesar 0.5424 yang lebih besar dari taraf nyata 5% sehingga tak tolak $H_0$ dan menandakan bahwa nilai tengah sisaan sama dengan nol. Hal ini berbeda dengan eksplorasi.
+
+## Overfitting
+
+Pada model musiman, ordo yang dilakukan *overfit* adalah ordo musiman (*P*, *Q*).
+
+```{r}
+#ARIMA(0,1,1)x(1,1,1)12
+tmodel1.ofP <- Arima(train.ts,order=c(2,1,3),seasonal=c(1,1,1))
+summary(tmodel1.ofP)
+lmtest::coeftest(tmodel1.ofP)
+```
+
+```{r}
+#ARIMA(2,1,3)x(2,1,0)12
+tmodel4.ofQ <- Arima(train.ts,order=c(2,1,3),seasonal=c(2,1,0))
+summary(tmodel4.ofQ)
+lmtest::coeftest(tmodel4.ofQ)
+```
+
+Model *overfitting* yang dicobakan menghasilkan nilai AIC dan signifikansi parameter yang lebih baik dari model awal. Oleh karena itu, model yang digunakan adalah model $ARIMA(2,1,3)\times(2,1,0)_{12}$ dengan semua parameter yang signfikan dan nilai AIC yang lebih kecil.
+
+### Peramalan
+
+```{r}
+ramalan_sarima = forecast::forecast(tmodel4.ofQ, 24)
+ramalan_sarima
+```
+
+```{r}
+autoplot(ramalan_sarima, col="blue")
+```
+
+```{r}
+accuracy(ramalan_sarima,test.ts)
+```
+Hasil akurasi menunjukkan nilai MAPE di bawah 10% yang menyatakan bahwa prediksi sangat akurat.
